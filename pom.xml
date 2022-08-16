@@ -48,53 +48,51 @@
 
         <!-- reader -->
         <module>mysqlreader</module>
-        <module>drdsreader</module>
+        <!-- <module>drdsreader</module>
         <module>sqlserverreader</module>
         <module>postgresqlreader</module>
         <module>kingbaseesreader</module>
         <module>oraclereader</module>
         <module>cassandrareader</module>
-        <module>oceanbasev10reader</module>
+        <module>oceanbasev10reader</module> -->
         <module>rdbmsreader</module>
 
-        <module>odpsreader</module>
+        <!-- <module>odpsreader</module>
         <module>otsreader</module>
         <module>otsstreamreader</module>
         <module>hbase11xreader</module>
         <module>hbase094xreader</module>
         <module>hbase11xsqlreader</module>
-        <module>hbase20xsqlreader</module>
+        <module>hbase20xsqlreader</module> -->
 
-        <module>ossreader</module>
+        <!-- <module>ossreader</module> -->
         <module>hdfsreader</module>
-        <module>ftpreader</module>
+        <!-- <module>ftpreader</module> -->
         <module>txtfilereader</module>
         <module>streamreader</module>
 
         <module>mongodbreader</module>
-        <module>tdenginereader</module>
-        <module>gdbreader</module>
-        <module>tsdbreader</module>
-        <module>opentsdbreader</module>
+        <!-- <module>tdenginereader</module> -->
+        <!-- <module>gdbreader</module> -->
 
 
         <!-- writer -->
         <module>mysqlwriter</module>
-        <module>drdswriter</module>
+        <!-- <module>drdswriter</module>
         <module>oraclewriter</module>
         <module>sqlserverwriter</module>
         <module>postgresqlwriter</module>
         <module>kingbaseeswriter</module>
         <module>adswriter</module>
         <module>oceanbasev10writer</module>
-        <module>cassandrawriter</module>
+        <module>cassandrawriter</module> -->
         <module>clickhousewriter</module>
-        <module>adbpgwriter</module>
-        <module>hologresjdbcwriter</module>
+        <!-- <module>adbpgwriter</module>
+        <module>hologresjdbcwriter</module> -->
         <module>rdbmswriter</module>
 
 
-        <module>odpswriter</module>
+        <!-- <module>odpswriter</module>
         <module>osswriter</module>
         <module>otswriter</module>
         <module>hbase11xwriter</module>
@@ -102,22 +100,22 @@
         <module>hbase11xsqlwriter</module>
         <module>hbase20xsqlwriter</module>
         <module>kuduwriter</module>
-        <module>ftpwriter</module>
+        <module>ftpwriter</module> -->
         <module>hdfswriter</module>
         <module>txtfilewriter</module>
         <module>streamwriter</module>
 
         <module>elasticsearchwriter</module>
-        <module>mongodbwriter</module>
+        <!-- <module>mongodbwriter</module>
         <module>tdenginewriter</module>
         <module>ocswriter</module>
-        <module>tsdbwriter</module>
         <module>gdbwriter</module>
-        <module>oscarwriter</module>
+        <module>oscarwriter</module> -->
 
         <!-- common support module -->
         <module>plugin-rdbms-util</module>
         <module>plugin-unstructured-storage-util</module>
+        <module>hdfsparquetwriter</module>
     </modules>
 
     <dependencyManagement>

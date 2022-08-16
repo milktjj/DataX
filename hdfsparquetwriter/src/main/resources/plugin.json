@@ -1,0 +1,6 @@
+{
+    "name": "hdfsparquetwriter",
+    "class": "com.alibaba.datax.plugin.writer.hdfsparquetwriter.HdfsParquetWriter",
+    "description": "useScene: prod. mechanism: via FileSystem connect HDFS write data concurrent by Parquet File Type.",
+    "developer": "alibaba"
+}

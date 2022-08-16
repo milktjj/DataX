@@ -1,4 +1,4 @@
-package com.alibaba.datax.plugin.writer.hdfswriter;
+package com.alibaba.datax.plugin.writer.hdfsparquetwriter;
 
 import com.alibaba.datax.common.element.Column;
 import com.alibaba.datax.common.element.Record;
@@ -6,37 +6,33 @@ import com.alibaba.datax.common.exception.DataXException;
 import com.alibaba.datax.common.plugin.RecordReceiver;
 import com.alibaba.datax.common.plugin.TaskPluginCollector;
 import com.alibaba.datax.common.util.Configuration;
-import com.alibaba.datax.plugin.unstructuredstorage.util.ColumnTypeUtil;
-import com.alibaba.datax.plugin.unstructuredstorage.util.HdfsUtil;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.google.common.collect.Lists;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.Validate;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat;
 import org.apache.hadoop.hive.ql.io.orc.OrcSerde;
+import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat;
+import org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.ObjectWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.mapred.*;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.parquet.schema.OriginalType;
-import org.apache.parquet.schema.PrimitiveType;
-import org.apache.parquet.schema.Types;
-
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
 public  class HdfsHelper {
-    public static final Logger LOG = LoggerFactory.getLogger(HdfsWriter.Job.class);
+    public static final Logger LOG = LoggerFactory.getLogger(HdfsParquetWriter.Job.class);
     public FileSystem fileSystem = null;
     public JobConf conf = null;
     public org.apache.hadoop.conf.Configuration hadoopConf = null;
@@ -403,6 +399,55 @@ public  class HdfsHelper {
         }
     }
 
+    /**
+     * 写parquetfile类型文件
+     * @param lineReceiver
+     * @param config
+     * @param fileName
+     * @param taskPluginCollector
+     */
+    public void parquetFileStartWrite(RecordReceiver lineReceiver, Configuration config, String fileName,
+                                      TaskPluginCollector taskPluginCollector){
+        List<Configuration>  columns = config.getListConfiguration(Key.COLUMN);
+        String compress = config.getString(Key.COMPRESS, null);
+        List<String> columnNames = getColumnNames(columns);
+        List<ObjectInspector> columnTypeInspectors = getColumnTypeInspectors(columns);
+        StructObjectInspector inspector = (StructObjectInspector)ObjectInspectorFactory
+                .getStandardStructObjectInspector(columnNames, columnTypeInspectors);
+
+        ParquetHiveSerDe parquetHiveSerDe = new ParquetHiveSerDe ();
+
+        MapredParquetOutputFormat outFormat = new MapredParquetOutputFormat();
+        if(!"NONE".equalsIgnoreCase(compress) && null != compress ) {
+            Class<? extends CompressionCodec> codecClass = getCompressCodec(compress);
+            if (null != codecClass) {
+                outFormat.setOutputCompressorClass(conf, codecClass);
+            }
+        }
+        try {
+            Properties colProp= new Properties();
+            colProp.setProperty("columns",String.join(",",columnNames));
+            List<String> colTypes = new ArrayList<>();
+            columns.forEach(col ->colTypes.add(col.getString(Key.TYPE)));
+            colProp.setProperty("columns.types",String.join(",",colTypes));
+            RecordWriter writer = (RecordWriter) outFormat.getHiveRecordWriter(conf,new Path(fileName), ObjectWritable.class,true,colProp,Reporter.NULL);
+            Record record = null;
+            while ((record = lineReceiver.getFromReader()) != null) {
+                MutablePair<List<Object>, Boolean> transportResult =  transportOneRecord(record,columns,taskPluginCollector);
+                if (!transportResult.getRight()) {
+                    writer.write(null, parquetHiveSerDe.serialize(transportResult.getLeft(), inspector));
+                }
+            }
+            writer.close(Reporter.NULL);
+        } catch (Exception e) {
+            String message = String.format("写文件文件[%s]时发生IO异常,请检查您的网络是否正常！", fileName);
+            LOG.error(message);
+            Path path = new Path(fileName);
+            deleteDir(path.getParent());
+            throw DataXException.asDataXException(HdfsWriterErrorCode.Write_FILE_IO_ERROR, e);
+        }
+    }
+
     public List<String> getColumnNames(List<Configuration> columns){
         List<String> columnNames = Lists.newArrayList();
         for (Configuration eachColumnConf : columns) {
@@ -562,68 +607,5 @@ public  class HdfsHelper {
         }
         transportResult.setLeft(recordList);
         return transportResult;
-    }
-
-
-    public static String generateParquetSchemaFromColumnAndType(List<Configuration> columns) {
-        Map<String, ColumnTypeUtil.DecimalInfo> decimalColInfo = new HashMap<>(16);
-        ColumnTypeUtil.DecimalInfo PARQUET_DEFAULT_DECIMAL_INFO = new ColumnTypeUtil.DecimalInfo(10, 2);
-        Types.MessageTypeBuilder typeBuilder = Types.buildMessage();
-        for (Configuration column : columns) {
-            String name = column.getString("name");
-            String colType = column.getString("type");
-            Validate.notNull(name, "column.name can't be null");
-            Validate.notNull(colType, "column.type can't be null");
-            switch (colType.toLowerCase()) {
-                case "tinyint":
-                case "smallint":
-                case "int":
-                    typeBuilder.optional(PrimitiveType.PrimitiveTypeName.INT32).named(name);
-                    break;
-                case "bigint":
-                case "long":
-                    typeBuilder.optional(PrimitiveType.PrimitiveTypeName.INT64).named(name);
-                    break;
-                case "float":
-                    typeBuilder.optional(PrimitiveType.PrimitiveTypeName.FLOAT).named(name);
-                    break;
-                case "double":
-                    typeBuilder.optional(PrimitiveType.PrimitiveTypeName.DOUBLE).named(name);
-                    break;
-                case "binary":
-                    typeBuilder.optional(PrimitiveType.PrimitiveTypeName.BINARY).named(name);
-                    break;
-                case "char":
-                case "varchar":
-                case "string":
-                    typeBuilder.optional(PrimitiveType.PrimitiveTypeName.BINARY).as(OriginalType.UTF8).named(name);
-                    break;
-                case "boolean":
-                    typeBuilder.optional(PrimitiveType.PrimitiveTypeName.BOOLEAN).named(name);
-                    break;
-                case "timestamp":
-                    typeBuilder.optional(PrimitiveType.PrimitiveTypeName.INT96).named(name);
-                    break;
-                case "date":
-                    typeBuilder.optional(PrimitiveType.PrimitiveTypeName.INT32).as(OriginalType.DATE).named(name);
-                    break;
-                default:
-                    if (ColumnTypeUtil.isDecimalType(colType)) {
-                        ColumnTypeUtil.DecimalInfo decimalInfo = ColumnTypeUtil.getDecimalInfo(colType, PARQUET_DEFAULT_DECIMAL_INFO);
-                        typeBuilder.optional(PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)
-                                .as(OriginalType.DECIMAL)
-                                .precision(decimalInfo.getPrecision())
-                                .scale(decimalInfo.getScale())
-                                .length(HdfsUtil.computeMinBytesForPrecision(decimalInfo.getPrecision()))
-                                .named(name);
-
-                        decimalColInfo.put(name, decimalInfo);
-                    } else {
-                        typeBuilder.optional(PrimitiveType.PrimitiveTypeName.BINARY).named(name);
-                    }
-                    break;
-            }
-        }
-        return typeBuilder.named("m").toString();
     }
 }
